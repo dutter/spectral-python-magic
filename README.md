@@ -8,7 +8,8 @@ This is a kit-based system, e.g., the plan is for you to download this as a dire
 CAN DO:
    * loop through as many files as you put into the input folder
    * ignore all non-xls files in `reference`
-   * run faster than the MATLAB version ~happy face~
+   * run faster than the MATLAB version \~happy face\~
+
 CANNOT DO
    * parse z-stacks
    * extract metadata from the czi to chose the correct unmixing file
@@ -30,10 +31,10 @@ cd spectral-python-magic
 
 2. Run `python --version` and make sure the output starts with 3 to double check that you're working with Python 3
 
-3. Make sure you have all the dependencies - `pip install -r requirements.txt`
-   * Or just `pip install numpy pandas xlrd scipy'
+3. Make sure you have all the dependencies: `pip install -r requirements.txt`
+   * Or just `pip install numpy pandas xlrd scipy`
 
-4. Add a test CZI to the `input` directory, an appropriate reference `.xls` file to the `reference` directory, and execute the program by running `python spectral-python-magic.py' (from within the `spectral-python-magic` directory, of course)' and watch it fly!
+4. Add a test CZI to the `input` directory, an appropriate reference `.xls` file to the `reference` directory, and execute the program by running `python spectral-python-magic.py` (from within the `spectral-python-magic` directory, of course) and watch it fly!
 
 5. Not working? Sorry. Try emailing me?
 
