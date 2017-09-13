@@ -1,0 +1,13 @@
+# Comparison of matlab vs python - 
+MATLAB with default (4?) processors 8gb RAM via tic/toc: Elapsed time is 930.324350 seconds
+spectral-python-magic with 4 processors same machine via time: 687.30s user 41.26s system 229% cpu 5:18.14 total
+spectral-python-magic with 8 processors same machine via time: 919.20s user 33.19s system 324% cpu 4:53.55 total
+spectral-python-magic with 7 processors same machine via time: 890.41s user 36.32s system 317% cpu 4:51.73 total
+spectral-python-magic with 7 processors same machine via time: 992.90s user 69.79s system 344% cpu 5:08.22 total
+spectral-python-magic with 7 processors same machine 32bit save: 1022.09s user 77.08s system 332% cpu 5:30.53 total
+
+
+
+
+
+
