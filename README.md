@@ -17,9 +17,7 @@ CANNOT DO
 
 # Installation:
 
-We recommend creating a virtual environment to make sure everything works nicely. But, dependencies are simple so there is a good chance you have these packages already, so if you do any amount of scientific Python, you should be good to just install and run. 
-
-We assume you already have Python 3.x.x and pip installed.
+Dependencies are simple so there is a good chance you have these packages already, so if you do any amount of scientific Python, you should be good to just download the codebase and run. But, here's some directions, assuming you already have Python 3.x.x and pip installed (If you don't have python already, don't worry, the internet is full of very straightforward directions for installing) 
 
 1. Acquire the code kit via zip here on GitHub, or via git on the command line. Example:
 
