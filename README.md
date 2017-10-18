@@ -9,11 +9,14 @@ CAN DO:
    * loop through as many files as you put into the input folder
    * ignore all non-xls files in `reference`
    * run faster than the MATLAB version \~happy face\~
+   * loop through z-stacks
+   * detect and handle whether used with a beamsplitter (e.g. multiple lasers per CZI but only one reference file) or multiple lasers used on a single frame (single laser per CZI, same base file name, reference file names.
+   * channel-select to retain only specific unmixed channels from a given laser
+   * store physical pixel size in metadata (for easy ImageJ scale bar)
+   * _theoretically_ handle z-stacks acquired with multiple single shots (e.g. 30 czi files from 5 lasers each at 6 z-planes, all labelled something like ROOT\_L\_Z.czi, should be able to be unmixed using the 5 reference files into a single unmixed Z-stack of ROOT-unmixed.tiff
 
 CANNOT DO
-   * parse z-stacks
-   * extract metadata from the czi to chose the correct unmixing file
-   * take command line arguments. Potentially, this could be written as a standalone program that is executed something more like `spectral-python-magic --input-dir /path/to/input --reference /path/to/ref --output /path/to/output [other tags]` But currently, that's not how it works.
+   * what else should it do?
 
 # Installation:
 
@@ -35,4 +38,13 @@ cd spectral-python-magic
 4. Add a test CZI to the `input` directory, an appropriate reference `.xls` file to the `reference` directory, and execute the program by running `python spectral-python-magic.py` (from within the `spectral-python-magic` directory, of course) and watch it fly!
 
 5. Not working? Sorry. Try emailing me?
+
+
+# Notes on usage:
+
+For single-shot mode (e.g. images in `input` were each taken with a single laser but there are multiple reference files to choose from in `reference`), the reference file _MUST_ contain the laser name somewhere. It can parse "Reference\_488.xls", "488.xls", "MyFavoriteBeamsplitter488.xls", etc. Which laser's reference to use is based on the laser parsed from the metadata - the unmixer should print this to stdout for each file processed (to help troubleshoot if Zeiss changes metadata significantly).
+
+For cases where multiple files need to be merged, such as z-stacks or multiple single laser shots, a single output file will be saved based on the root filename. Root being defined as every part of the filename that is NOT of the format `_LASER_`. For example, `NiceImage_488_s001.czi NiceImage_488_s001.czi ... NiceImage_633_s001.czi` would all be unmixed and concatenated into `NiceImage_s001-unmixed.tiff`. Similarly, `PrettyPicture_Laser488.czi` would become `PrettyPicture-unmixed.tiff`
+
+If you want to only retain certain channels, simply modify the block of code that starts with `channelSelector`. The format is `"Laser": ["List", "of", "channel", "names", "to", "keep"]` Here, you only need a unique subset of the column names in the corresponding reference file. Names need not be complete, for instance, `At550` will match the reference column `MBL_At550` etc.
 

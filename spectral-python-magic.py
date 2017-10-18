@@ -10,15 +10,22 @@ import multiprocessing
 from czifile import CziFile as cziutils
 import tifffile
 
-# # # # # # # # # # # # # # # # # # # # # #
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Linear unmixing: this project works in "kit" format:
 # takes raw images from 'input', processes via xls reference spectra in 'reference', outputs tif stacks into 'output'
+#
+# The code should detect which laser(s) used from the czi metadata and choose the appropriate reference set
+#
+# If using single lasers, channel-selects based on in-code 'channelSelector' dict - EDIT THIS BY HAND!
+#
+# Physical pixel size should be embedded in metadata for use in ImageJ 
 #
 # Options you might want to change are at the start of the final block (starts with "if __name__=='__main__':")
 #
 # Code originally written in MATLAB by Blair Rossetti, ported to Python 3.x.x by Daniel Utter & Steven Wilbert
-# Last edited 2017.09.13
-# # # # # # # # # # # # # # # # # # # # # #
+# Last edited 2017.10.17
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 
 def loadImage(cziFile):
@@ -26,27 +33,48 @@ def loadImage(cziFile):
         meta = czi.metadata
         spectral = meta.find('.//SubType').text
 
+        # CZI metadata has lasers used as value of <Wavelength> under block(s) <LightSourceSettings>
+        lightsourcesettings = [source for source in meta.findall('.//LightSourceSettings')]
+        lasers = sorted(list(set([round(float(source.find('.//Wavelength').text)) for source in lightsourcesettings])))
+
+        print("  Excitation laser(s) identified from czi metadata: " + ', '.join([str(l) for l in lasers]))
+
+        # ET.dump(meta)  # this prints out ALL metadata xml as raw text
+
         numBands = int(meta.find('.//SizeC').text)
+        scaleX = float(meta.find('.//ScalingX').text)
+        scaleY = float(meta.find('.//ScalingY').text)
         x = int(meta.find('.//SizeX').text)
         y = int(meta.find('.//SizeY').text)
 
+        # check for z stack - if Z doesn't exist, assume 1
+        try:
+            z = int(meta.find('.//SizeZ').text)
+        except AttributeError:
+            z = 1
+
         if "Spectral" not in spectral:
             sys.exit('This file is not spectral!')
-        if 32 != numBands:
-            sys.exit('There are only ' + str(numBands) + ' spectral bins, expected 32!')
 
-        # should we hunt for excitation laser?
+        # warn user of how many spectral bins found
+        print("  " + str(numBands) + " lambda bins found")
+
 
         rawImage = czi.asarray(max_workers=numCores)
         #        f, t, b, z, x, y, n = list(rawImage.shape)
-        return rawImage, x, y, numBands
+        return rawImage, x, y, z, numBands, lasers, scaleX, scaleY
 
 
-def processImage(rawImage, referenceMatrix, x, y, numBands):
+def processImage(rawImage, referenceMatrix, x, y, zplane, numBands):
     # get number of channels to unmix into
     numChannels = len(referenceMatrix.columns.values)
 
-    # Remove extraneous dimensions to be bands x X x Y
+    # slice appropriate z
+    if len(rawImage.shape) == 8:
+        rawImage = rawImage[:, :, :, :, zplane, :, :, :]
+    else:
+        rawImage = rawImage[:, :, :, zplane, :, :, :]
+    # Remove extraneous dimensions to be Bands x X x Y
     czi3d = np.reshape(rawImage, (numBands, x, y))
 
     # median filter
@@ -73,20 +101,19 @@ def parUnmix(referenceMatrix, czi2d, x, y, N, numChannels, numCores):  # twice a
     # convert to 3d - order='A' needed in reshape to recreate original pixel order
     unmixed = np.reshape(unmixed, (numChannels, x, y), order='A')
 
-    unmixed = unmixed.astype('uint32')
+    unmixed = unmixed.astype('uint16')
     return unmixed
 
 
 def serUnmix(referenceMatrix, czi2d, x, y, N, numChannels):
     # make new dataframe for output to be in
-    unmixed = np.zeros((numChannels, N), 'uint32')
+    unmixed = np.zeros((numChannels, N), 'uint16')
     for pix in range(N):
         unmixed[:, pix] = optimize.nnls(referenceMatrix, czi2d[:, pix])[0]
 
     unmixed = np.reshape(unmixed, (numChannels, x, y))
 
     return unmixed
-
 
 
 if __name__=='__main__':
@@ -97,6 +124,17 @@ if __name__=='__main__':
     outputDirName = 'output'
     referenceDirName = 'reference'
     medianFilter = True  # this does the 3-pixel median BEFORE unmixing, 'False' does no filtering
+
+    channelSelector = {
+        "405": ["AF", "PacBlue", "At425"],
+        "488": ["Dy490", "Lx514"],
+        "514": ["At532"],
+        "561": ["At550", "RRX"],
+        "594": ["TRX", "At594"],
+        "633": ["At620", "At647", "At655"]
+    }
+
+
     # ! # ! # END OF LIKELY CHANGES
 
     # get main kit location
@@ -108,36 +146,77 @@ if __name__=='__main__':
     outputDir = curDir + '/' + outputDirName + '/'
 
     # read in reference file
-    referenceFile = [s for s in os.listdir(referenceDir) if 'xls' in s]
-    if len(referenceFile) > 1:
-        sys.exit('There are more than two files in ' + referenceDir + ' and it is confusing me!')
+    singleShot = False
+    referenceFiles = [s for s in os.listdir(referenceDir) if 'xls' in s]
+    if len(referenceFiles) > 1:
+        print('Found multiple reference spectra so processing all input as multiple single-laser shots!')
+        singleShot = True
 
-    referenceFile = referenceDir + referenceFile[0]
-    referenceMatrix = pandas.read_excel(referenceFile)
 
     # get list of files to process
     imagesToProcess = os.listdir(inputDir)
+    if imagesToProcess[0].startswith(".DS_Store"):  # sometimes python gets confused and reads DS_Store file
+        del imagesToProcess[0]
 
     for image in imagesToProcess:
         print("Processing " + image)
         imPath = inputDir + image
 
-        rawImage, x, y, numBands = loadImage(imPath)
-        czi2d, N, numChannels = processImage(rawImage, referenceMatrix, x, y, numBands)
+        rawImage, x, y, z, numBands, lasers, scaleX, scaleY = loadImage(imPath)
+        # set scale - scaleX from czi is size per pixel in cm, tifffile/imageJ wants num pixels per micron
+        physicalWidth = int(1/(100*scaleX))
+        physicalHeight = int(1/(100*scaleY))
 
-        # if only one core requested:
-        if numCores is 1:
-            unmixed = serUnmix(referenceMatrix, czi2d, x, y, numChannels)
+        # determine which reference file to use
+        if singleShot:
+            referenceFile = referenceDir + [ref for ref in referenceFiles if str(lasers[0]) in ref][0]
+            # parse the filename to get just the core part, for the output filename
+            image = '_'.join([part for part in image.split('_') if str(lasers[0]) not in part])
         else:
-            unmixed = parUnmix(referenceMatrix, czi2d, x, y, N, numChannels, numCores)
+            referenceFile = referenceDir + referenceFiles[0]
 
-        # set output name and save
-        newName = re.sub(".czi$", "-unmixed.tif", image)
-        imPathOut = outputDir + newName
-        tifffile.imsave(file=imPathOut, data=unmixed)
+        # read in reference matrix
+        referenceMatrix = pandas.read_excel(referenceFile)
 
-        print('Unmixed image stack saved as: ' + imPathOut)
-        #saveUnmixed(unmixed, imPathOut)
+        # iterate through z stack
+        for zed in range(z):
+            print("  On plane " + str(zed + 1) + " of " + str(z))
+            czi2d, N, numChannels = processImage(rawImage, referenceMatrix, x, y, zed, numBands)
+
+            # if only one core requested:
+            if numCores is 1:
+                unmixed = serUnmix(referenceMatrix, czi2d, x, y, numChannels)
+            else:
+                unmixed = parUnmix(referenceMatrix, czi2d, x, y, N, numChannels, numCores)
+
+            newName = re.sub(".czi$", "-unmixed.tif", image)
+            imPathOut = outputDir + newName
+
+            # if single, need to figure out which channels, and then concatenate ome's
+            if singleShot:
+
+                selectChannels = [i for i, v in enumerate(referenceMatrix.columns.values)
+                                  if any(m in v for m in channelSelector[str(lasers[0])])]
+                channelsCurrent = len(channelSelector[str(lasers[0])])
+
+                print("  Keeping channels " + ', '.join(channelSelector[str(lasers[0])]) +
+                      " from laser " + str(lasers[0]))
+
+                # Select channels appropriate for this laser
+                unmixed = unmixed[selectChannels, :, :]
+
+                # append all shots into one tiff (need minisblack in case first laser has 3 ch and it thinks RGB)
+                #bf.formatwriter.write_image(imPathOut, unmixed)
+
+                tifffile.imsave(file=imPathOut, data=unmixed, append=True, photometric='minisblack',
+                                resolution=(physicalWidth, physicalHeight, 'cm'))
+            else:
+                # Just save
+                #bf.formatwriter.write_image(imPathOut, unmixed)
+                tifffile.imsave(file=imPathOut, data=unmixed, append=True, photometric='minisblack',
+                                resolution=(physicalWidth, physicalHeight, 'cm'))
+
+            print('  Done! Unmixed image: ' + imPathOut)
 
 
 
