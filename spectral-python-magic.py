@@ -206,13 +206,10 @@ if __name__=='__main__':
                 unmixed = unmixed[selectChannels, :, :]
 
                 # append all shots into one tiff (need minisblack in case first laser has 3 ch and it thinks RGB)
-                #bf.formatwriter.write_image(imPathOut, unmixed)
-
                 tifffile.imsave(file=imPathOut, data=unmixed, append=True, photometric='minisblack',
                                 resolution=(physicalWidth, physicalHeight, 'cm'))
             else:
                 # Just save
-                #bf.formatwriter.write_image(imPathOut, unmixed)
                 tifffile.imsave(file=imPathOut, data=unmixed, append=True, photometric='minisblack',
                                 resolution=(physicalWidth, physicalHeight, 'cm'))
 
