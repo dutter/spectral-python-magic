@@ -11,7 +11,7 @@ from czifile import CziFile as cziutils
 import tifffile
 
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # #
 # Linear unmixing: this project works in "kit" format:
 # takes raw images from 'input', processes via xls reference spectra in 'reference', outputs tif stacks into 'output'
 #
@@ -19,13 +19,13 @@ import tifffile
 #
 # If using single lasers, channel-selects based on in-code 'channelSelector' dict - EDIT THIS BY HAND!
 #
-# Physical pixel size should be embedded in metadata for use in ImageJ 
+# Physical pixel size should be embedded in metadata for use in ImageJ
 #
 # Options you might want to change are at the start of the final block (starts with "if __name__=='__main__':")
 #
 # Code originally written in MATLAB by Blair Rossetti, ported to Python 3.x.x by Daniel Utter & Steven Wilbert
 # Last edited 2017.10.17
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # #
 
 
 def loadImage(cziFile):
@@ -155,6 +155,7 @@ if __name__=='__main__':
 
     # get list of files to process
     imagesToProcess = os.listdir(inputDir)
+
     if imagesToProcess[0].startswith(".DS_Store"):  # sometimes python gets confused and reads DS_Store file
         del imagesToProcess[0]
 
@@ -162,8 +163,10 @@ if __name__=='__main__':
         print("Processing " + image)
         imPath = inputDir + image
 
+        # load in the image (7 or 8 dimensions) and store some parameters
         rawImage, x, y, z, numBands, lasers, scaleX, scaleY = loadImage(imPath)
-        # set scale - scaleX from czi is size per pixel in cm, tifffile/imageJ wants num pixels per micron
+
+        # define scale - scaleX from czi is size per pixel in cm, tifffile/imageJ wants num pixels per micron
         physicalWidth = int(1/(100*scaleX))
         physicalHeight = int(1/(100*scaleY))
 
@@ -173,6 +176,7 @@ if __name__=='__main__':
             # parse the filename to get just the core part, for the output filename
             image = '_'.join([part for part in image.split('_') if str(lasers[0]) not in part])
         else:
+            # just pick the first (hopefully only) reference file in the list
             referenceFile = referenceDir + referenceFiles[0]
 
         # read in reference matrix
@@ -181,11 +185,13 @@ if __name__=='__main__':
         # iterate through z stack
         for zed in range(z):
             print("  On plane " + str(zed + 1) + " of " + str(z))
+
+            # 2-dimensional slize along the z axis. N is just x*y
             czi2d, N, numChannels = processImage(rawImage, referenceMatrix, x, y, zed, numBands)
 
             # if only one core requested:
             if numCores is 1:
-                unmixed = serUnmix(referenceMatrix, czi2d, x, y, numChannels)
+                unmixed = serUnmix(referenceMatrix, czi2d, x, y, N, numChannels)
             else:
                 unmixed = parUnmix(referenceMatrix, czi2d, x, y, N, numChannels, numCores)
 
